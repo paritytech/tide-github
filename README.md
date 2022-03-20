@@ -2,6 +2,8 @@
 
 Process Github webhooks in [tide](https://github.com/http-rs/tide).
 
+[API docs](https://docs.rs/tide-github/0.1.0/tide_github/)
+
 ```Rust
 use octocrab::models::issues::Comment;
 use tide_github::Event;
