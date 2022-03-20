@@ -1,6 +1,8 @@
 use async_trait::async_trait;
+use futures::future::Future;
 use std::collections::HashMap;
-use std::str::FromStr;
+use std::pin::Pin;
+use std::sync::Arc;
 use tide::{prelude::*, Request, StatusCode};
 
 mod middleware;
@@ -9,20 +11,34 @@ pub fn new(webhook_secret: &'static [u8]) -> ServerBuilder {
     ServerBuilder::new(webhook_secret)
 }
 
-type EventHandler = &'static (dyn Fn() -> tide::Result + Send + Sync);
+type HandlerMap = HashMap<
+    Event,
+    Arc<dyn Send + Sync + 'static + Fn(Request<()>) -> Pin<Box<dyn Future<Output = ()> + Send>>>,
+>;
 
 pub struct ServerBuilder {
     webhook_secret: &'static [u8],
-    handlers: HashMap<Event, EventHandler>,
+    handlers: HandlerMap,
 }
 
 impl ServerBuilder {
     pub fn new(webhook_secret: &'static [u8]) -> Self {
-        ServerBuilder{webhook_secret, handlers: HashMap::new()}
+        ServerBuilder {
+            webhook_secret,
+            handlers: HashMap::new(),
+        }
     }
 
-    pub fn on(mut self, event: Event, handler: EventHandler) -> Self {
-        self.handlers.insert(event, handler);
+    pub fn on<E: Into<Event>>(
+        mut self,
+        event: E,
+        handler: impl Fn(Request<()>) -> Pin<Box<dyn Future<Output = ()> + Send>>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        let event: Event = event.into();
+        self.handlers.insert(event, Arc::new(handler));
         self
     }
 
@@ -38,22 +54,23 @@ impl ServerBuilder {
 }
 
 struct EventHandlerDispatcher {
-    handlers: HashMap<Event, EventHandler>,
+    handlers: HandlerMap,
 }
 
 impl EventHandlerDispatcher {
-    fn new(handlers: HashMap<Event, EventHandler>) -> Self {
+    fn new(handlers: HandlerMap) -> Self {
         EventHandlerDispatcher { handlers }
     }
 }
 
 #[async_trait]
-impl<State> tide::Endpoint<State> for EventHandlerDispatcher
+impl tide::Endpoint<()> for EventHandlerDispatcher
 where
-    State: Clone + Send + Sync + 'static,
-    EventHandlerDispatcher: Send + Sync + 'static,
+    EventHandlerDispatcher: Send + Sync,
 {
-    async fn call(&self, req: Request<State>) -> tide::Result {
+    async fn call(&self, req: Request<()>) -> tide::Result {
+        use std::str::FromStr;
+
         let event_header = req
             .header("X-Github-Event")
             .ok_or(EventDispatchError::MissingEventHeader)
@@ -64,7 +81,10 @@ where
             .get(&event)
             .ok_or_else(|| EventDispatchError::MissingHandlerForEvent(event_header.as_str().into()))
             .status(StatusCode::NotImplemented)?;
-        (handler)()
+
+        (handler)(req).await;
+
+        Ok("".into())
     }
 }
 
