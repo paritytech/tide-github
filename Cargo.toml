@@ -1,6 +1,6 @@
 [package]
 name = "tide-github"
-description = "Process Github webhooks in [tide](https://github.com/http-rs/tide)"
+description = "Easily process Github webhooks using tide"
 edition = "2018"
 version = "0.1.0"
 authors = ["Koen Wilde <koen@parity.io>"]
