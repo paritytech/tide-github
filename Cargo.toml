@@ -3,6 +3,7 @@ name = "tide-github"
 version = "0.1.0"
 authors = ["Koen Wilde <koen@parity.io>"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies]
 tide = "0.16"
