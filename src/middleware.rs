@@ -25,7 +25,13 @@ where
         if let Some(value) = req.header("X-Hub-Signature-256") {
             let encoded_sig = value.to_owned();
             let signature = match encoded_sig.as_str().strip_prefix("sha256=") {
-                Some(hex) => hex::decode(hex)?,
+                Some(hex) => match hex::decode(hex) {
+                    Ok(hex) => hex,
+                    Err(err) => {
+                        log::warn!("Failed to hex decode Github's signature: {}", err);
+                        return Ok(Response::new(StatusCode::BadRequest))
+                    }
+                },
                 None => {
                     log::warn!("Failed to verify Github's signature: Unexpected format");
                     return Ok(Response::new(StatusCode::BadRequest));
