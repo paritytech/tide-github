@@ -38,7 +38,9 @@ where
                 }
             };
             let mut mac: Hmac<Sha256> = Hmac::new_from_slice(&self.secret)?;
-            mac.update(&req.body_bytes().await?);
+            let body = req.body_bytes().await?;
+            mac.update(&body);
+            req.set_body(body);
             if let Err(err) = mac.verify_slice(&signature) {
                 log::warn!("Failed to verify Github's signature: {}", err);
                 return Ok(Response::new(StatusCode::BadRequest));
