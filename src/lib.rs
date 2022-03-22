@@ -5,34 +5,30 @@
 //! ## Example
 //!
 //! ```Rust
-//! use octocrab::models::issues::Comment;
-//! use tide_github::Event;
-//!
 //! #[async_std::main]
 //! async fn main() -> tide::Result<()> {
 //!     let mut app = tide::new();
 //!     let github = tide_github::new(b"My Github webhook s3cr#t")
-//!         .on(Event::IssuesComment, |mut req| {
-//!             Box::pin(async move {
-//!                 let _comment: Comment = req.body_json().await.unwrap();
-//!             })
+//!         .on(Event::IssueComment, |payload| {
+//!             println!("Received a payload for repository {}", payload.repository.name);
 //!         })
 //!         .build();
 //!     app.at("/gh_webhooks").nest(github);
 //!     app.listen("127.0.0.1:3000").await?;
 //!     Ok(())
 //! }
+//!
 //! ```
 //!
 //! The API is still in development and may change in unexpected ways.
 use async_trait::async_trait;
-use futures::future::Future;
 use std::collections::HashMap;
-use std::pin::Pin;
-use std::sync::Arc;
 use tide::{prelude::*, Request, StatusCode};
+use std::sync::Arc;
 
 mod middleware;
+mod payload;
+use payload::Payload;
 
 /// Returns a [`ServerBuilder`] with the given webhook secret.
 ///
@@ -44,7 +40,8 @@ pub fn new(webhook_secret: &'static [u8]) -> ServerBuilder {
 
 type HandlerMap = HashMap<
     Event,
-    Arc<dyn Send + Sync + 'static + Fn(Request<()>) -> Pin<Box<dyn Future<Output = ()> + Send>>>,
+    // TODO: Create a nice type alias for the Event Handler
+    Arc<dyn Send + Sync + 'static + Fn(Payload)>,
 >;
 
 /// [`ServerBuilder`] is used to first register closures to events before finally building a
@@ -64,11 +61,9 @@ impl ServerBuilder {
 
     /// Registers the given event handler to be run when the given event is received.
     ///
-    /// The event handler receives a [`tide::Request`] as the single argument. Because
-    /// [`tide::Request`] is not really useful in synchronous (non-`async`) environments, the event
-    /// handler itself is required to be `async`. Since webhooks are generally passively consumed
-    /// (Github will not meaningfully (to us) process our response), the handler returns only a
-    /// `()` in it's `Future`. As far as the event dispatcher is concerned, all the
+    /// The event handler receives a [`Payload`] as the single argument. Since webhooks are
+    /// generally passively consumed (Github will not meaningfully (to us) process our response),
+    /// the handler returns only a `()`. As far as the event dispatcher is concerned, all the
     /// meaningful work will be done as side-effects of the closures you register here.
     ///
     /// The types involved here are not stable yet due to ongoing API development.
@@ -76,19 +71,15 @@ impl ServerBuilder {
     /// ## Example
     ///
     /// ```Rust
-    ///     use octocrab::models::issues::Comment;
     ///     let github = tide_github::new("my webhook s3ct#t")
-    ///         .on(Event::IssuesComment, |mut req| {
-    ///             Box::pin(async move {
-    ///                 println!("Something happened with an issue comment");
-    ///                 let _comment: Comment = req.body_json().await.unwrap();
-    ///             })
+    ///         .on(Event::IssueComment, |payload| {
+    ///             println!("Got payload for repository {}", payload.repository.name)
     ///         });
     /// ```
     pub fn on<E: Into<Event>>(
         mut self,
         event: E,
-        handler: impl Fn(Request<()>) -> Pin<Box<dyn Future<Output = ()> + Send>>
+        handler: impl Fn(Payload)
             + Send
             + Sync
             + 'static,
@@ -119,11 +110,20 @@ impl ServerBuilder {
 /// Github sends the type of the event (and thus of the payload) as the `X-github-Event` header
 /// that we parse into an `Event` by implementing [`::std::str::FromStr`] for it.
 #[non_exhaustive]
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum Event {
     /// The Github
     /// [`IssueCommentEvent`](https://docs.github.com/en/developers/webhooks-and-events/events/github-event-types#issuecommentevent) event.
-    IssuesComment,
+    IssueComment,
+}
+
+use std::fmt;
+impl fmt::Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::IssueComment => write!(f, "issue_comment"),
+        }
+    }
 }
 
 impl ::std::str::FromStr for Event {
@@ -134,25 +134,28 @@ impl ::std::str::FromStr for Event {
 
         // TODO: Generate this from a derive macro on `Event`
         match event {
-            "issues_comment" => Ok(IssuesComment),
-            event => Err(EventDispatchError::UnsupportedEvent(event.into())),
+            "issue_comment" => Ok(IssueComment),
+            event => {
+                log::warn!("Unsupported event: {}", event);
+                Err(EventDispatchError::UnsupportedEvent)
+            },
         }
     }
 }
 
 /// The variants of [`EventDispatchError`] represent the errors that would prevent us from calling
 /// the handler to process the Github Webhook.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Clone, Debug)]
 pub enum EventDispatchError {
     /// Github send us a webhook for an [`Event`] that we don't support.
-    #[error("Event '{0}' is not supported")]
-    UnsupportedEvent(String),
+    #[error("Received an Event of an unsupported type")]
+    UnsupportedEvent,
     /// We're processing something that does not seem to be a Github webhook.
     #[error("No `X-Github-Event` header found")]
     MissingEventHeader,
     /// No handler was registered for the event we received.
     #[error("No handler registered for Event '{0}'")]
-    MissingHandlerForEvent(String),
+    MissingHandlerForEvent(Event),
 }
 
 struct EventHandlerDispatcher {
@@ -170,21 +173,26 @@ impl tide::Endpoint<()> for EventHandlerDispatcher
 where
     EventHandlerDispatcher: Send + Sync,
 {
-    async fn call(&self, req: Request<()>) -> tide::Result {
+    async fn call(&self, mut req: Request<()>) -> tide::Result {
         use std::str::FromStr;
+        use async_std::task;
 
         let event_header = req
             .header("X-Github-Event")
             .ok_or(EventDispatchError::MissingEventHeader)
-            .status(StatusCode::BadRequest)?;
-        let event = Event::from_str(event_header.as_str()).status(StatusCode::NotImplemented)?;
+            .status(StatusCode::BadRequest)?.as_str();
+
+        let event = Event::from_str(event_header).status(StatusCode::NotImplemented)?;
+        let payload: payload::Payload = req.body_json().await?;
         let handler = self
             .handlers
             .get(&event)
-            .ok_or_else(|| EventDispatchError::MissingHandlerForEvent(event_header.as_str().into()))
+            .ok_or_else(|| { println!("Missing Handler for Event {:?}", event); EventDispatchError::MissingHandlerForEvent(event)})
             .status(StatusCode::NotImplemented)?;
 
-        (handler)(req).await;
+        let handler = handler.clone();
+
+        task::spawn_blocking(move || {handler(payload)});
 
         Ok("".into())
     }

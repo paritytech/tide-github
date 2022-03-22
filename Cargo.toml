@@ -2,7 +2,7 @@
 name = "tide-github"
 description = "Easily process Github webhooks using tide"
 edition = "2018"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Koen Wilde <koen@parity.io>"]
 repository = "https://github.com/paritytech/tide_github"
 license = "Apache-2.0"
@@ -22,3 +22,5 @@ serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"
 hmac = "0.12"
 hex = "0.4"
+
+octocrab = "0.15"

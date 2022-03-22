@@ -5,17 +5,14 @@ Process Github webhooks in [tide](https://github.com/http-rs/tide).
 [API docs](https://docs.rs/tide-github/0.1.0/tide_github/)
 
 ```Rust
-use octocrab::models::issues::Comment;
 use tide_github::Event;
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     let mut app = tide::new();
     let github = tide_github::new(b"My Github webhook s3cr#t")
-        .on(Event::IssuesComment, |mut req| {
-            Box::pin(async move {
-                let _comment: Comment = req.body_json().await.unwrap();
-            })
+        .on(Event::IssueComment, |payload| {
+            println!("Got payload for repository {}", payload.repository.name);
         })
         .build();
     app.at("/gh_webhooks").nest(github);
