@@ -2,7 +2,7 @@
 
 Process Github webhooks in [tide](https://github.com/http-rs/tide).
 
-[API docs](https://docs.rs/tide-github/0.1.0/tide_github/)
+[API docs](https://docs.rs/tide-github/0.2.0/tide_github/)
 
 ```Rust
 use tide_github::Event;
