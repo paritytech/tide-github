@@ -2,9 +2,9 @@
 name = "tide-github"
 description = "Easily process Github webhooks using tide"
 edition = "2018"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Koen Wilde <koen@parity.io>"]
-repository = "https://github.com/paritytech/tide_github"
+repository = "https://github.com/paritytech/tide-github"
 license = "Apache-2.0"
 categories = ["web-programming", "api-bindings"]
 keywords = ["tide", "github", "webhooks"]
