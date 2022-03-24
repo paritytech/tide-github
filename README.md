@@ -10,7 +10,7 @@ use tide_github::Event;
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     let mut app = tide::new();
-    let github = tide_github::new(b"My Github webhook s3cr#t")
+    let github = tide_github::new("My Github webhook s3cr#t")
         .on(Event::IssueComment, |payload| {
             println!("Got payload for repository {}", payload.repository.name);
         })
