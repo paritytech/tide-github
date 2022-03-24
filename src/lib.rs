@@ -23,8 +23,8 @@
 //! The API is still in development and may change in unexpected ways.
 use async_trait::async_trait;
 use std::collections::HashMap;
-use tide::{prelude::*, Request, StatusCode};
 use std::sync::Arc;
+use tide::{prelude::*, Request, StatusCode};
 
 mod middleware;
 /// The payload module contains the types and conversions for the webhook payloads.
@@ -80,10 +80,7 @@ impl ServerBuilder {
     pub fn on<E: Into<Event>>(
         mut self,
         event: E,
-        handler: impl Fn(Payload)
-            + Send
-            + Sync
-            + 'static,
+        handler: impl Fn(Payload) + Send + Sync + 'static,
     ) -> Self {
         let event: Event = event.into();
         self.handlers.insert(event, Arc::new(handler));
@@ -139,7 +136,7 @@ impl ::std::str::FromStr for Event {
             event => {
                 log::warn!("Unsupported event: {}", event);
                 Err(EventDispatchError::UnsupportedEvent)
-            },
+            }
         }
     }
 }
@@ -175,25 +172,29 @@ where
     EventHandlerDispatcher: Send + Sync,
 {
     async fn call(&self, mut req: Request<()>) -> tide::Result {
-        use std::str::FromStr;
         use async_std::task;
+        use std::str::FromStr;
 
         let event_header = req
             .header("X-Github-Event")
             .ok_or(EventDispatchError::MissingEventHeader)
-            .status(StatusCode::BadRequest)?.as_str();
+            .status(StatusCode::BadRequest)?
+            .as_str();
 
         let event = Event::from_str(event_header).status(StatusCode::NotImplemented)?;
         let payload: payload::Payload = req.body_json().await?;
         let handler = self
             .handlers
             .get(&event)
-            .ok_or_else(|| { println!("Missing Handler for Event {:?}", event); EventDispatchError::MissingHandlerForEvent(event)})
+            .ok_or_else(|| {
+                println!("Missing Handler for Event {:?}", event);
+                EventDispatchError::MissingHandlerForEvent(event)
+            })
             .status(StatusCode::NotImplemented)?;
 
         let handler = handler.clone();
 
-        task::spawn_blocking(move || {handler(payload)});
+        task::spawn_blocking(move || handler(payload));
 
         Ok("".into())
     }

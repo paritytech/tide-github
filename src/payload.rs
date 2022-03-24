@@ -1,6 +1,6 @@
-use std::convert::TryInto;
-use octocrab::models::{Repository, User, issues::Comment, issues::Issue};
+use octocrab::models::{issues::Comment, issues::Issue, Repository, User};
 use serde::Deserialize;
+use std::convert::TryInto;
 
 /// [`Payload`] represents the (JSON) payload of the webhook Github send us.
 ///
@@ -59,7 +59,6 @@ impl TryInto<IssueCommentPayload> for Payload {
             issue,
         })
     }
-
 }
 
 /// The errors that can occur interpreting the webhook payload.

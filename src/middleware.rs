@@ -29,7 +29,7 @@ where
                     Ok(hex) => hex,
                     Err(err) => {
                         log::warn!("Failed to hex decode Github's signature: {}", err);
-                        return Ok(Response::new(StatusCode::BadRequest))
+                        return Ok(Response::new(StatusCode::BadRequest));
                     }
                 },
                 None => {
