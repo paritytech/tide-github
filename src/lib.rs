@@ -27,7 +27,8 @@ use tide::{prelude::*, Request, StatusCode};
 use std::sync::Arc;
 
 mod middleware;
-mod payload;
+/// The payload module contains the types and conversions for the webhook payloads.
+pub mod payload;
 use payload::Payload;
 
 /// Returns a [`ServerBuilder`] with the given webhook secret.
