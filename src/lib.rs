@@ -34,8 +34,8 @@ use payload::Payload;
 ///
 /// Call [`Self::on()`](on@ServerBuilder) to register closures to be run when the given event is
 /// received and [`Self::build()`](build@ServerBuilder) to retrieve the final [`tide::Server`].
-pub fn new(webhook_secret: &'static [u8]) -> ServerBuilder {
-    ServerBuilder::new(webhook_secret)
+pub fn new<S: Into<String>>(webhook_secret: S) -> ServerBuilder {
+    ServerBuilder::new(webhook_secret.into())
 }
 
 type HandlerMap = HashMap<
@@ -47,12 +47,12 @@ type HandlerMap = HashMap<
 /// [`ServerBuilder`] is used to first register closures to events before finally building a
 /// [`tide::Server`] using those closures.
 pub struct ServerBuilder {
-    webhook_secret: &'static [u8],
+    webhook_secret: String,
     handlers: HandlerMap,
 }
 
 impl ServerBuilder {
-    fn new(webhook_secret: &'static [u8]) -> Self {
+    fn new(webhook_secret: String) -> Self {
         ServerBuilder {
             webhook_secret,
             handlers: HashMap::new(),

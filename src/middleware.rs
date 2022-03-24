@@ -1,9 +1,9 @@
 pub(crate) struct WebhookVerification {
-    secret: &'static [u8],
+    secret: String,
 }
 
 impl WebhookVerification {
-    pub(crate) fn new(secret: &'static [u8]) -> Self {
+    pub(crate) fn new(secret: String) -> Self {
         WebhookVerification { secret }
     }
 }
@@ -37,7 +37,7 @@ where
                     return Ok(Response::new(StatusCode::BadRequest));
                 }
             };
-            let mut mac: Hmac<Sha256> = Hmac::new_from_slice(&self.secret)?;
+            let mut mac: Hmac<Sha256> = Hmac::new_from_slice(&self.secret.as_bytes())?;
             let body = req.body_bytes().await?;
             mac.update(&body);
             req.set_body(body);
